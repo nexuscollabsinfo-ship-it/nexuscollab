@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": "..",
+    "paths": {
+      "@contracts/*": ["contracts/*"],
+      "@db/*": ["db/*"]
+    },
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "strict": true
+  },
+  "include": ["./**/*", "../contracts/**/*", "../db/**/*"]
+}

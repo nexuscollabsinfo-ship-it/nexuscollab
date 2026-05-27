@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq, desc, sql } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
+import { getDb, insertReturningId } from "./queries/connection";
 import * as schema from "@db/schema";
 
 export const projectRouter = createRouter({
@@ -17,25 +17,22 @@ export const projectRouter = createRouter({
       })
     )
     .mutation(async ({ input }) => {
-      const result = await getDb().insert(schema.projects).values({
-        clientRequestId: input.clientRequestId,
-        title: input.title,
-        description: input.description,
-        assignedWorkerId: input.assignedWorkerId,
-        deadline: input.deadline ? new Date(input.deadline) : null,
-        priority: input.priority,
-        status: input.assignedWorkerId ? "assigned" : "pending",
-        startDate: new Date(),
-      });
+      const projectId = await insertReturningId(
+        "projects",
+        ["clientrequestid", "assignedworkerid", "title", "description",
+         "status", "priority", "startdate", "deadline"],
+        [input.clientRequestId, input.assignedWorkerId ?? null,
+         input.title, input.description,
+         input.assignedWorkerId ? "assigned" : "pending",
+         input.priority, new Date(),
+         input.deadline ? new Date(input.deadline) : null]
+      );
 
-      const projectId = Number(result[0].insertId);
-
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "project",
-        entityId: projectId,
-        action: "New project created",
-        details: { title: input.title },
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "details"],
+        ["project", projectId, "New project created", JSON.stringify({ title: input.title })]
+      );
 
       if (input.assignedWorkerId) {
         await getDb()
@@ -73,7 +70,7 @@ export const projectRouter = createRouter({
 
       return {
         projects: rows,
-        total: countResult[0]?.count || 0,
+        total: Number(countResult[0]?.count) || 0,
       };
     }),
 
@@ -86,9 +83,7 @@ export const projectRouter = createRouter({
     )
     .mutation(async ({ input }) => {
       const updates: any = { status: input.status, updatedAt: new Date() };
-      if (input.status === "completed") {
-        updates.completionDate = new Date();
-      }
+      if (input.status === "completed") updates.completionDate = new Date();
 
       await getDb()
         .update(schema.projects)

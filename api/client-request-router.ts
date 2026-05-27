@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq, desc, like, or, sql } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
+import { getDb, insertReturningId } from "./queries/connection";
 import * as schema from "@db/schema";
 
 export const clientRequestRouter = createRouter({
@@ -24,20 +24,23 @@ export const clientRequestRouter = createRouter({
       })
     )
     .mutation(async ({ input }) => {
-      const result = await getDb().insert(schema.clientRequests).values({
-        ...input,
-        referenceFiles: input.referenceFiles || [],
-      });
+      const requestId = await insertReturningId(
+        "client_requests",
+        ["fullname", "email", "phone", "discordusername", "instagramusername", "country",
+         "leadsource", "serviceneeded", "projectdetails", "budgetrange", "deadline",
+         "paymentmethod", "referencefiles", "status"],
+        [input.fullName, input.email, input.phone ?? null, input.discordUsername ?? null,
+         input.instagramUsername ?? null, input.country, input.leadSource, input.serviceNeeded,
+         input.projectDetails, input.budgetRange, input.deadline, input.paymentMethod,
+         JSON.stringify(input.referenceFiles ?? []), "pending"]
+      );
 
-      const requestId = Number(result[0].insertId);
-
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "client",
-        entityId: requestId,
-        action: "New client request submitted",
-        performedBy: null,
-        details: { service: input.serviceNeeded, budget: input.budgetRange },
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "performedby", "details"],
+        ["client", requestId, "New client request submitted", null,
+         JSON.stringify({ service: input.serviceNeeded, budget: input.budgetRange })]
+      );
 
       return { success: true, requestId };
     }),
@@ -87,9 +90,9 @@ export const clientRequestRouter = createRouter({
       return {
         requests: rows.map(r => ({
           ...r,
-          referenceFiles: typeof r.referenceFiles === "string" ? JSON.parse(r.referenceFiles) : r.referenceFiles ?? [],
+          referenceFiles: Array.isArray(r.referenceFiles) ? r.referenceFiles : [],
         })),
-        total: countResult[0]?.count || 0,
+        total: Number(countResult[0]?.count) || 0,
       };
     }),
 
@@ -105,7 +108,7 @@ export const clientRequestRouter = createRouter({
       if (!row) return undefined;
       return {
         ...row,
-        referenceFiles: typeof row.referenceFiles === "string" ? JSON.parse(row.referenceFiles) : row.referenceFiles ?? [],
+        referenceFiles: Array.isArray(row.referenceFiles) ? row.referenceFiles : [],
       };
     }),
 
@@ -120,20 +123,15 @@ export const clientRequestRouter = createRouter({
     .mutation(async ({ input }) => {
       await getDb()
         .update(schema.clientRequests)
-        .set({
-          status: input.status,
-          adminNotes: input.adminNotes,
-          updatedAt: new Date(),
-        })
+        .set({ status: input.status, adminNotes: input.adminNotes, updatedAt: new Date() })
         .where(eq(schema.clientRequests.id, input.id));
 
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "client",
-        entityId: input.id,
-        action: `Status updated to ${input.status}`,
-        performedBy: null,
-        details: { status: input.status },
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "performedby", "details"],
+        ["client", input.id, `Status updated to ${input.status}`, null,
+         JSON.stringify({ status: input.status })]
+      );
 
       return { success: true };
     }),
@@ -143,20 +141,14 @@ export const clientRequestRouter = createRouter({
     .mutation(async ({ input }) => {
       await getDb()
         .update(schema.clientRequests)
-        .set({
-          assignedWorkerId: input.workerId,
-          status: "assigned",
-          updatedAt: new Date(),
-        })
+        .set({ assignedWorkerId: input.workerId, status: "assigned", updatedAt: new Date() })
         .where(eq(schema.clientRequests.id, input.id));
 
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "client",
-        entityId: input.id,
-        action: "Worker assigned",
-        performedBy: null,
-        details: { workerId: input.workerId },
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "performedby", "details"],
+        ["client", input.id, "Worker assigned", null, JSON.stringify({ workerId: input.workerId })]
+      );
 
       return { success: true };
     }),
@@ -168,13 +160,11 @@ export const clientRequestRouter = createRouter({
         .delete(schema.clientRequests)
         .where(eq(schema.clientRequests.id, input.id));
 
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "client",
-        entityId: input.id,
-        action: "Client request deleted",
-        performedBy: null,
-        details: {},
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "performedby", "details"],
+        ["client", input.id, "Client request deleted", null, JSON.stringify({})]
+      );
 
       return { success: true };
     }),

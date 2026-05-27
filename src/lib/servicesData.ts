@@ -536,8 +536,8 @@ export const serviceCategories: ServiceCategory[] = [
   },
 ];
 
-// Flat list of all service names for dropdowns
-export const allServiceNames = serviceCategories.flatMap(c => c.skills.map(s => s.name));
+// Flat list of all unique service names for dropdowns (deduped across categories)
+export const allServiceNames = [...new Set(serviceCategories.flatMap(c => c.skills.map(s => s.name)))];
 
 // Featured/popular services for Home page (24 items)
 export const featuredServices = [

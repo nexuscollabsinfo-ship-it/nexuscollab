@@ -5,6 +5,14 @@ import type { TrpcContext } from "./context";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  errorFormatter({ shape, error }) {
+    // Log the real underlying DB error (e.g. connection refused, SSL error)
+    const cause = (error.cause as any);
+    if (cause?.cause) {
+      console.error("[DB Error cause]", cause.cause?.message ?? cause.cause);
+    }
+    return shape;
+  },
 });
 
 export const createRouter = t.router;

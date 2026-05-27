@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq, desc, sql } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
+import { getDb, insertReturningId } from "./queries/connection";
 import * as schema from "@db/schema";
 
 export const workerApplicationRouter = createRouter({
@@ -33,44 +33,38 @@ export const workerApplicationRouter = createRouter({
       })
     )
     .mutation(async ({ input }) => {
-      const result = await getDb().insert(schema.workerApplications).values({
-        fullName: input.fullName,
-        email: input.email,
-        phone: input.phone,
-        discordUsername: input.discordUsername,
-        instagramUsername: input.instagramUsername,
-        country: input.country,
-        workType: input.workType,
-        skills: input.skills,
-        minPrice: input.minPrice.toString(),
-        maxPrice: input.maxPrice.toString(),
-        deliveryTime: input.deliveryTime,
-        paymentMethods: input.paymentMethods,
-      });
-
-      const workerId = Number(result[0].insertId);
+      const workerId = await insertReturningId(
+        "worker_applications",
+        ["fullname", "email", "phone", "discordusername", "instagramusername", "country",
+         "worktype", "skills", "minprice", "maxprice", "deliverytime", "paymentmethods", "status"],
+        [input.fullName, input.email, input.phone, input.discordUsername ?? null,
+         input.instagramUsername ?? null, input.country, input.workType,
+         JSON.stringify(input.skills), input.minPrice.toString(), input.maxPrice.toString(),
+         input.deliveryTime, JSON.stringify(input.paymentMethods), "pending"]
+      );
 
       if (input.portfolios && input.portfolios.length > 0) {
         for (const portfolio of input.portfolios) {
-          await getDb().insert(schema.workerPortfolios).values({
-            workerId,
-            skillName: portfolio.skillName,
-            portfolioFiles: portfolio.portfolioFiles || [],
-            softwareTools: portfolio.softwareTools || [],
-            experienceDetails: portfolio.experienceDetails,
-            yearsOfExperience: portfolio.yearsOfExperience,
-            skillLevel: portfolio.skillLevel,
-          });
+          await insertReturningId(
+            "worker_portfolios",
+            ["workerid", "skillname", "portfoliofiles", "softwaretools",
+             "experiencedetails", "yearsofexperience", "skilllevel"],
+            [workerId, portfolio.skillName,
+             JSON.stringify(portfolio.portfolioFiles ?? []),
+             JSON.stringify(portfolio.softwareTools ?? []),
+             portfolio.experienceDetails ?? null,
+             portfolio.yearsOfExperience ?? null,
+             portfolio.skillLevel ?? null]
+          );
         }
       }
 
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "worker",
-        entityId: workerId,
-        action: "New worker application submitted",
-        performedBy: null,
-        details: { skills: input.skills, workType: input.workType },
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "performedby", "details"],
+        ["worker", workerId, "New worker application submitted", null,
+         JSON.stringify({ skills: input.skills, workType: input.workType })]
+      );
 
       return { success: true, applicationId: workerId };
     }),
@@ -108,10 +102,10 @@ export const workerApplicationRouter = createRouter({
       return {
         applications: rows.map(r => ({
           ...r,
-          skills: typeof r.skills === "string" ? JSON.parse(r.skills) : r.skills ?? [],
-          paymentMethods: typeof r.paymentMethods === "string" ? JSON.parse(r.paymentMethods) : r.paymentMethods ?? [],
+          skills: Array.isArray(r.skills) ? r.skills : [],
+          paymentMethods: Array.isArray(r.paymentMethods) ? r.paymentMethods : [],
         })),
-        total: countResult[0]?.count || 0,
+        total: Number(countResult[0]?.count) || 0,
       };
     }),
 
@@ -134,12 +128,12 @@ export const workerApplicationRouter = createRouter({
 
       return {
         ...application,
-        skills: typeof application.skills === "string" ? JSON.parse(application.skills) : application.skills ?? [],
-        paymentMethods: typeof application.paymentMethods === "string" ? JSON.parse(application.paymentMethods) : application.paymentMethods ?? [],
+        skills: Array.isArray(application.skills) ? application.skills : [],
+        paymentMethods: Array.isArray(application.paymentMethods) ? application.paymentMethods : [],
         portfolios: portfolioRows.map(p => ({
           ...p,
-          portfolioFiles: typeof p.portfolioFiles === "string" ? JSON.parse(p.portfolioFiles) : p.portfolioFiles ?? [],
-          softwareTools: typeof p.softwareTools === "string" ? JSON.parse(p.softwareTools) : p.softwareTools ?? [],
+          portfolioFiles: Array.isArray(p.portfolioFiles) ? p.portfolioFiles : [],
+          softwareTools: Array.isArray(p.softwareTools) ? p.softwareTools : [],
         })),
       };
     }),
@@ -155,20 +149,15 @@ export const workerApplicationRouter = createRouter({
     .mutation(async ({ input }) => {
       await getDb()
         .update(schema.workerApplications)
-        .set({
-          status: input.status,
-          adminNotes: input.adminNotes,
-          updatedAt: new Date(),
-        })
+        .set({ status: input.status, adminNotes: input.adminNotes, updatedAt: new Date() })
         .where(eq(schema.workerApplications.id, input.id));
 
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "worker",
-        entityId: input.id,
-        action: `Application ${input.status}`,
-        performedBy: null,
-        details: { status: input.status },
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "performedby", "details"],
+        ["worker", input.id, `Application ${input.status}`, null,
+         JSON.stringify({ status: input.status })]
+      );
 
       return { success: true };
     }),
@@ -176,23 +165,19 @@ export const workerApplicationRouter = createRouter({
   delete: publicQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      // Delete portfolios first (foreign key)
       await getDb()
         .delete(schema.workerPortfolios)
         .where(eq(schema.workerPortfolios.workerId, input.id));
 
-      // Delete the application
       await getDb()
         .delete(schema.workerApplications)
         .where(eq(schema.workerApplications.id, input.id));
 
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "worker",
-        entityId: input.id,
-        action: "Worker application deleted",
-        performedBy: null,
-        details: {},
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "performedby", "details"],
+        ["worker", input.id, "Worker application deleted", null, JSON.stringify({})]
+      );
 
       return { success: true };
     }),

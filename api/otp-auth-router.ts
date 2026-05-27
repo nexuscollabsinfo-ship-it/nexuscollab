@@ -2,7 +2,7 @@ import { z } from "zod";
 import * as jose from "jose";
 import { eq, and, gt } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
+import { getDb, insertReturningId } from "./queries/connection";
 import * as schema from "@db/schema";
 import { env } from "./lib/env";
 import { findUserByPhone } from "./queries/users";
@@ -32,14 +32,13 @@ export const otpAuthRouter = createRouter({
     )
     .mutation(async ({ input }) => {
       const code = generateOtp();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-      await getDb().insert(schema.otpCodes).values({
-        phone: input.phone,
-        countryCode: input.countryCode,
-        code,
-        expiresAt,
-      });
+      await insertReturningId(
+        "otp_codes",
+        ["phone", "countrycode", "code", "expiresat"],
+        [input.phone, input.countryCode, code, expiresAt]
+      );
 
       return {
         success: true,
@@ -74,9 +73,7 @@ export const otpAuthRouter = createRouter({
         .limit(1);
 
       const otp = otpRows.at(0);
-      if (!otp) {
-        throw new Error("Invalid or expired OTP code");
-      }
+      if (!otp) throw new Error("Invalid or expired OTP code");
 
       await getDb()
         .update(schema.otpCodes)
@@ -87,16 +84,12 @@ export const otpAuthRouter = createRouter({
 
       if (!user) {
         const unionId = `phone_${input.countryCode}_${input.phone}_${Date.now()}`;
-        await getDb().insert(schema.users).values({
-          name: input.name || `User ${input.phone}`,
-          phone: input.phone,
-          countryCode: input.countryCode,
-          unionId,
-          role: "user",
-          phoneVerified: true,
-          status: "active",
-          lastSignInAt: new Date(),
-        });
+        await insertReturningId(
+          "users",
+          ["name", "phone", "countrycode", "unionid", "role", "phoneverified", "status", "lastsigninat"],
+          [input.name || `User ${input.phone}`, input.phone, input.countryCode,
+           unionId, "user", true, "active", new Date()]
+        );
         user = await findUserByPhone(input.phone);
       } else {
         await getDb()
@@ -107,7 +100,10 @@ export const otpAuthRouter = createRouter({
 
       if (!user) throw new Error("Failed to create or find user");
 
-      const token = await signLocalToken({ userId: user.id, email: user.email || `${user.phone}@nexus.local` });
+      const token = await signLocalToken({
+        userId: user.id,
+        email: user.email || `${user.phone}@nexus.local`,
+      });
 
       return {
         success: true,

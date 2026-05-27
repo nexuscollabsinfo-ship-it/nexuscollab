@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq, desc, sql, like, or } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
+import { getDb, insertReturningId } from "./queries/connection";
 import * as schema from "@db/schema";
 
 export const userRouter = createRouter({
@@ -41,7 +41,7 @@ export const userRouter = createRouter({
 
       return {
         users: rows,
-        total: countResult[0]?.count || 0,
+        total: Number(countResult[0]?.count) || 0,
       };
     }),
 
@@ -69,12 +69,11 @@ export const userRouter = createRouter({
         .set({ role: input.role })
         .where(eq(schema.users.id, input.id));
 
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "user",
-        entityId: input.id,
-        action: `Role updated to ${input.role}`,
-        details: { role: input.role },
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "details"],
+        ["user", input.id, `Role updated to ${input.role}`, JSON.stringify({ role: input.role })]
+      );
 
       return { success: true };
     }),
@@ -92,12 +91,11 @@ export const userRouter = createRouter({
         .set({ status: input.status })
         .where(eq(schema.users.id, input.id));
 
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "user",
-        entityId: input.id,
-        action: `Status updated to ${input.status}`,
-        details: { status: input.status },
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "details"],
+        ["user", input.id, `Status updated to ${input.status}`, JSON.stringify({ status: input.status })]
+      );
 
       return { success: true };
     }),
@@ -109,11 +107,11 @@ export const userRouter = createRouter({
         .delete(schema.users)
         .where(eq(schema.users.id, input.id));
 
-      await getDb().insert(schema.activityLogs).values({
-        entityType: "user",
-        entityId: input.id,
-        action: "User deleted",
-      });
+      await insertReturningId(
+        "activity_logs",
+        ["entitytype", "entityid", "action", "details"],
+        ["user", input.id, "User deleted", JSON.stringify({})]
+      );
 
       return { success: true };
     }),
@@ -133,18 +131,18 @@ export const userRouter = createRouter({
     const oauthUsers = await getDb()
       .select({ count: sql<number>`count(*)` })
       .from(schema.users)
-      .where(sql`unionId IS NOT NULL`);
+      .where(sql`unionid IS NOT NULL`);
     const localUsers = await getDb()
       .select({ count: sql<number>`count(*)` })
       .from(schema.users)
       .where(sql`password IS NOT NULL`);
 
     return {
-      totalUsers: totalUsers[0]?.count || 0,
-      adminCount: adminCount[0]?.count || 0,
-      activeUsers: activeUsers[0]?.count || 0,
-      oauthUsers: oauthUsers[0]?.count || 0,
-      localUsers: localUsers[0]?.count || 0,
+      totalUsers: Number(totalUsers[0]?.count) || 0,
+      adminCount: Number(adminCount[0]?.count) || 0,
+      activeUsers: Number(activeUsers[0]?.count) || 0,
+      oauthUsers: Number(oauthUsers[0]?.count) || 0,
+      localUsers: Number(localUsers[0]?.count) || 0,
     };
   }),
 });

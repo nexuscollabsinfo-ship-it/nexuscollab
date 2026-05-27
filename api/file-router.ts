@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq, desc } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
+import { getDb, insertReturningId } from "./queries/connection";
 import * as schema from "@db/schema";
 
 export const fileRouter = createRouter({
@@ -32,8 +32,12 @@ export const fileRouter = createRouter({
       })
     )
     .mutation(async ({ input }) => {
-      const result = await getDb().insert(schema.uploadedFiles).values(input);
-      return { success: true, fileId: Number(result[0].insertId) };
+      const fileId = await insertReturningId(
+        "uploaded_files",
+        ["entitytype", "entityid", "fileurl", "filename", "filetype", "filesize"],
+        [input.entityType, input.entityId, input.fileUrl, input.fileName, input.fileType, input.fileSize]
+      );
+      return { success: true, fileId };
     }),
 
   delete: publicQuery

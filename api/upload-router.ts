@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq, desc } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
+import { getDb, insertReturningId } from "./queries/connection";
 import * as schema from "@db/schema";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -9,7 +9,8 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ALLOWED_TYPES: Record<string, string[]> = {
   image: ["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"],
   video: ["video/mp4", "video/webm", "video/quicktime"],
-  document: ["application/pdf", "text/plain", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  document: ["application/pdf", "text/plain", "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
   archive: ["application/zip", "application/x-zip-compressed"],
   design: ["application/figma", "image/x-psd", "application/x-sketch"],
 };
@@ -17,7 +18,6 @@ const ALLOWED_TYPES: Record<string, string[]> = {
 const ALL_ALLOWED_TYPES = Object.values(ALLOWED_TYPES).flat();
 
 export async function ensureUploadDir() {
-  // No-op in serverless environments
   try {
     const { mkdir } = await import("fs/promises");
     const { join } = await import("path");
@@ -50,7 +50,7 @@ export const uploadRouter = createRouter({
 
       return {
         uploadUrl: fileUrl,
-        fileUrl: fileUrl,
+        fileUrl,
         safeName,
         filePath: fileUrl,
       };
@@ -68,19 +68,12 @@ export const uploadRouter = createRouter({
       })
     )
     .mutation(async ({ input }) => {
-      const result = await getDb().insert(schema.uploadedFiles).values({
-        entityType: input.entityType,
-        entityId: input.entityId,
-        fileUrl: input.fileUrl,
-        fileName: input.fileName,
-        fileType: input.fileType,
-        fileSize: input.fileSize,
-      });
-
-      return {
-        success: true,
-        fileId: Number(result[0].insertId),
-      };
+      const fileId = await insertReturningId(
+        "uploaded_files",
+        ["entitytype", "entityid", "fileurl", "filename", "filetype", "filesize"],
+        [input.entityType, input.entityId, input.fileUrl, input.fileName, input.fileType, input.fileSize]
+      );
+      return { success: true, fileId };
     }),
 
   listByEntity: publicQuery

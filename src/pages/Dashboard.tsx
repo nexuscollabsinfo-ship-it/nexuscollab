@@ -598,7 +598,7 @@ export default function Dashboard() {
                   { l: "Platform", v: "NEXUS COLLABS" },
                   { l: "Admin Email", v: "nexuscollabs.info@gmail.com" },
                   { l: "Phone", v: "+91 8448179299" },
-                  { l: "Storage", v: "MySQL Database" },
+                  { l: "Storage", v: "PostgreSQL Database" },
                   { l: "Total Services", v: "900+" },
                   { l: "Clients", v: `${clients.length}` },
                   { l: "Workers", v: `${workers.length}` },
@@ -612,7 +612,7 @@ export default function Dashboard() {
 
               <div className="glass-panel rounded-xl p-6 space-y-4">
                 <h3 className="text-sm font-semibold flex items-center gap-2 text-amber-400"><Database className="w-4 h-4" /> Database Status</h3>
-                <p className="text-xs text-[#666]">All submissions are stored in a centralized MySQL database. Data is accessible from any device.</p>
+                <p className="text-xs text-[#666]">All submissions are stored in a centralized PostgreSQL database. Data is accessible from any device.</p>
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                   <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-xs text-emerald-400">Connected to database</span>

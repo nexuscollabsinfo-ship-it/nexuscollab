@@ -1,0 +1,89 @@
+═══════════════════════════════════════════════════════════════
+  VERCEL DEPLOYMENT FIX - PostgreSQL Migration
+═══════════════════════════════════════════════════════════════
+
+PROBLEM:
+--------
+Vercel deployment shows MySQL syntax errors even though local works fine.
+Error: "Failed query: select `id`, `fullName`... from `client_requests`"
+(Notice the backticks ` instead of PostgreSQL double quotes ")
+
+ROOT CAUSE:
+-----------
+Vercel doesn't have the DATABASE_URL environment variable because
+.env file is gitignored (which is correct for security).
+
+SOLUTION:
+---------
+
+STEP 1: Set Environment Variable in Vercel
+-------------------------------------------
+1. Go to: https://vercel.com/dashboard
+2. Select your project: nexuscollab
+3. Click: Settings → Environment Variables
+4. Add new variable:
+   
+   Name:  DATABASE_URL
+   Value: postgresql://postgres.kpvmlqtyrsfuwjmezijb:%40Rr866433030517656@aws-1-ap-south-1.pooler.supabase.com:5432/postgres
+   
+   ⚠️ IMPORTANT: Select ALL environments (Production, Preview, Development)
+
+5. Also verify these variables exist:
+   - APP_ID = myapp
+   - APP_SECRET = change_this_secret_key
+
+STEP 2: Force Fresh Deployment
+-------------------------------
+After adding the environment variable, you MUST force a fresh build:
+
+METHOD 1 - Via Vercel Dashboard (Recommended):
+   1. Go to: Deployments tab
+   2. Click on the latest deployment
+   3. Click the ⋯ (three dots) menu
+   4. Select "Redeploy"
+   5. ⚠️ UNCHECK "Use existing Build Cache"
+   6. Click "Redeploy"
+
+METHOD 2 - Via Git Command:
+   Run these commands in your terminal:
+   
+   git commit --allow-empty -m "Force Vercel rebuild with PostgreSQL"
+   git push
+
+STEP 3: Verify Deployment
+--------------------------
+After redeployment:
+1. Check Vercel build logs for "DATABASE_URL" 
+2. Verify no MySQL backtick errors
+3. Test API endpoint: https://nexuscollab.vercel.app/api/trpc/clientRequest.list
+
+VERIFICATION CHECKLIST:
+-----------------------
+✅ Local development works (29 tests pass)
+✅ PostgreSQL schema uses lowercase columns
+✅ Code uses pg driver (not mysql2)
+✅ drizzle.config.ts uses "postgresql" dialect
+✅ All routers updated to use insertReturningId()
+❌ DATABASE_URL needs to be set in Vercel dashboard ← YOU ARE HERE
+
+TROUBLESHOOTING:
+----------------
+If still failing after above steps:
+
+1. Check Vercel Function Logs:
+   - Go to: Deployments → [Latest] → Functions
+   - Look for actual error messages
+
+2. Clear Build Cache:
+   - Settings → General → Build & Development Settings
+   - Click "Clear Build Cache"
+
+3. Check node_modules:
+   - Verify build logs show "pg" being installed
+   - No mysql2 errors
+
+4. Verify DATABASE_URL format:
+   - Must use session pooler (port 5432)
+   - Password must be URL-encoded: @Rr866433030517656 → %40Rr866433030517656
+
+═══════════════════════════════════════════════════════════════

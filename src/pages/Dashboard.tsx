@@ -11,7 +11,7 @@ import {
   Database, Loader2,
 } from "lucide-react";
 
-const ADMIN_PASSWORD = "123456789";
+const ADMIN_PASSWORD = "my bad";
 
 type Tab = "overview" | "clients" | "workers" | "activity" | "settings";
 
